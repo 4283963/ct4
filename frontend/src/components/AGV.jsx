@@ -37,13 +37,27 @@ export function AGV({ agv }) {
 
   useEffect(() => {
     targetPos.current.set(agv.x, agv.y, agv.z)
+    // #region debug-point H2:pos-update
+    fetch("http://127.0.0.1:7777/event",{method:"POST",body:JSON.stringify({sessionId:"agv-spin-collision-bug",runId:"post",hypothesisId:"H2",location:"AGV.jsx:39",msg:"[DEBUG] Position target updated",data:{id:agv.id,x:agv.x,z:agv.z,targetX:agv.targetX,targetZ:agv.targetZ,status:agv.status},ts:Date.now()})}).catch(()=>{});
+    // #endregion
   }, [agv.x, agv.y, agv.z])
 
   useEffect(() => {
     const dx = agv.targetX - agv.x
     const dz = agv.targetZ - agv.z
-    if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) {
-      targetRot.current = Math.atan2(dx, dz)
+    const dist = Math.sqrt(dx * dx + dz * dz)
+
+    if (dist > 0.15 && (Math.abs(dx) > 0.08 || Math.abs(dz) > 0.08)) {
+      const newRot = Math.atan2(dx, dz)
+      let rotDiff = newRot - targetRot.current
+      while (rotDiff > Math.PI) rotDiff -= Math.PI * 2
+      while (rotDiff < -Math.PI) rotDiff += Math.PI * 2
+      if (Math.abs(rotDiff) > 0.05) {
+        targetRot.current = newRot
+        // #region debug-point H1:rotation-calc
+        fetch("http://127.0.0.1:7777/event",{method:"POST",body:JSON.stringify({sessionId:"agv-spin-collision-bug",runId:"post",hypothesisId:"H1",location:"AGV.jsx:46",msg:"[DEBUG] Target rotation calculated",data:{id:agv.id,dx:dx,dz:dz,dist:dist,absDx:Math.abs(dx),absDz:Math.abs(dz),targetRot:targetRot.current,rotDiff:rotDiff},ts:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
     }
   }, [agv.targetX, agv.targetZ, agv.x, agv.z])
 
@@ -56,8 +70,16 @@ export function AGV({ agv }) {
     let rotDiff = targetRot.current - currentRot.current
     while (rotDiff > Math.PI) rotDiff -= Math.PI * 2
     while (rotDiff < -Math.PI) rotDiff += Math.PI * 2
-    currentRot.current += rotDiff * Math.min(delta * 6, 1)
+    const prevRot = currentRot.current
+
+    const maxRotSpeed = 4.0
+    const clampedDiff = Math.max(-maxRotSpeed * delta, Math.min(maxRotSpeed * delta, rotDiff))
+    currentRot.current += clampedDiff
     groupRef.current.rotation.y = currentRot.current
+
+    // #region debug-point H5:rotation-interp
+    if (Math.abs(rotDiff) > 0.1) fetch("http://127.0.0.1:7777/event",{method:"POST",body:JSON.stringify({sessionId:"agv-spin-collision-bug",runId:"post",hypothesisId:"H5",location:"AGV.jsx:60",msg:"[DEBUG] Large rotation diff",data:{id:agv.id,rotDiff:rotDiff,clampedDiff:clampedDiff,prevRot:prevRot,newRot:currentRot.current,targetRot:targetRot.current,delta:delta},ts:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (agv.status === 'moving') {
       wheelRefs.current.forEach((wheel) => {

@@ -11,8 +11,8 @@ import (
 )
 
 type SetTargetRequest struct {
-	X float64 `json:"x" binding:"required"`
-	Z float64 `json:"z" binding:"required"`
+	X *float64 `json:"x" binding:"required"`
+	Z *float64 `json:"z" binding:"required"`
 }
 
 func SetupRouter(h *hub.Hub, w *models.Warehouse) *gin.Engine {
@@ -52,8 +52,8 @@ func SetupRouter(h *hub.Hub, w *models.Warehouse) *gin.Engine {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			if ok := w.SetAGVTarget(id, req.X, req.Z); !ok {
-				c.JSON(http.StatusNotFound, gin.H{"error": "AGV not found"})
+			if ok := w.SetAGVTarget(id, *req.X, *req.Z); !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "AGV not found or target inside obstacle"})
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"message": "target set"})

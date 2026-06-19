@@ -1,11 +1,35 @@
 package models
 
 import (
+	"bytes"
+	"encoding/json"
 	"math"
 	"math/rand"
+	"net/http"
 	"sync"
 	"time"
 )
+
+// #region debug-point helpers
+var debugClient = &http.Client{Timeout: 50 * time.Millisecond}
+
+func reportDebug(hypothesisId string, location string, msg string, data map[string]interface{}) {
+	event := map[string]interface{}{
+		"sessionId":    "agv-spin-collision-bug",
+		"runId":        "pre",
+		"hypothesisId": hypothesisId,
+		"location":     location,
+		"msg":          "[DEBUG] " + msg,
+		"data":         data,
+		"ts":           time.Now().UnixMilli(),
+	}
+	body, _ := json.Marshal(event)
+	go func() {
+		debugClient.Post("http://127.0.0.1:7777/event", "application/json", bytes.NewReader(body))
+	}()
+}
+
+// #endregion
 
 type AGVStatus string
 
@@ -214,6 +238,27 @@ func (w *Warehouse) Simulate() {
 	}
 }
 
+func (w *Warehouse) isInsideRack(x, z float64, margin float64) bool {
+	for _, rack := range w.racks {
+		if x > rack.X-rack.Width/2-margin && x < rack.X+rack.Width/2+margin &&
+			z > rack.Z-rack.Depth/2-margin && z < rack.Z+rack.Depth/2+margin {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Warehouse) findValidTarget(agv *AGV) (float64, float64) {
+	for attempts := 0; attempts < 50; attempts++ {
+		tx := (rand.Float64() - 0.5) * 20
+		tz := (rand.Float64() - 0.5) * 14
+		if !w.isInsideRack(tx, tz, 1.5) {
+			return tx, tz
+		}
+	}
+	return agv.X, agv.Z
+}
+
 func (w *Warehouse) updateAGV(agv *AGV) {
 	agv.Battery = math.Max(10, agv.Battery-0.005)
 
@@ -236,7 +281,13 @@ func (w *Warehouse) updateAGV(agv *AGV) {
 	dz := agv.TargetZ - agv.Z
 	dist := math.Sqrt(dx*dx + dz*dz)
 
-	if dist > 0.05 {
+	// #region debug-point H2:agv-move
+	{
+		_ = dist
+	}
+	// #endregion
+
+	if dist > 0.12 {
 		agv.Status = AGVMoving
 		moveX := (dx / dist) * agv.Speed
 		moveZ := (dz / dist) * agv.Speed
@@ -246,6 +297,22 @@ func (w *Warehouse) updateAGV(agv *AGV) {
 		if math.Abs(moveZ) > math.Abs(dz) {
 			moveZ = dz
 		}
+
+		// #region debug-point H3:collision-check
+		nextX := agv.X + moveX
+		nextZ := agv.Z + moveZ
+		if w.isInsideRack(nextX, nextZ, 0.6) {
+			reportDebug("H3", "warehouse.go:263", "AGV colliding with rack, re-routing", map[string]interface{}{
+				"id":    agv.ID,
+				"nextX": nextX,
+				"nextZ": nextZ,
+			})
+			agv.Status = AGVIdle
+			agv.TargetX, agv.TargetZ = w.findValidTarget(agv)
+			return
+		}
+		// #endregion
+
 		agv.X += moveX
 		agv.Z += moveZ
 	} else {
@@ -253,8 +320,17 @@ func (w *Warehouse) updateAGV(agv *AGV) {
 			agv.Status = AGVIdle
 		}
 		if rand.Float64() < 0.01 && agv.Status == AGVIdle {
-			agv.TargetX = (rand.Float64() - 0.5) * 20
-			agv.TargetZ = (rand.Float64() - 0.5) * 14
+			newTargetX, newTargetZ := w.findValidTarget(agv)
+
+			// #region debug-point H4:target-in-rack
+			{
+				_ = newTargetX
+				_ = newTargetZ
+			}
+			// #endregion
+
+			agv.TargetX = newTargetX
+			agv.TargetZ = newTargetZ
 		}
 	}
 }
@@ -275,6 +351,9 @@ func (w *Warehouse) SetAGVTarget(id string, x, z float64) bool {
 	defer w.mu.Unlock()
 	agv, ok := w.agvs[id]
 	if !ok {
+		return false
+	}
+	if w.isInsideRack(x, z, 1.5) {
 		return false
 	}
 	agv.TargetX = x
