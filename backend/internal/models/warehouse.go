@@ -64,17 +64,18 @@ const (
 )
 
 type Slot struct {
-	ID       string     `json:"id"`
-	RackID   string     `json:"rackId"`
-	Row      int        `json:"row"`
-	Col      int        `json:"col"`
-	Level    int        `json:"level"`
-	X        float64    `json:"x"`
-	Y        float64    `json:"y"`
-	Z        float64    `json:"z"`
-	Status   SlotStatus `json:"status"`
-	ItemID   string     `json:"itemId"`
-	ItemName string     `json:"itemName"`
+	ID         string     `json:"id"`
+	RackID     string     `json:"rackId"`
+	Row        int        `json:"row"`
+	Col        int        `json:"col"`
+	Level      int        `json:"level"`
+	X          float64    `json:"x"`
+	Y          float64    `json:"y"`
+	Z          float64    `json:"z"`
+	Status     SlotStatus `json:"status"`
+	ItemID     string     `json:"itemId"`
+	ItemName   string     `json:"itemName"`
+	VisitCount int        `json:"visitCount"`
 }
 
 type Rack struct {
@@ -152,17 +153,18 @@ func (w *Warehouse) initRacks() {
 						status = SlotOccupied
 					}
 					slot := &Slot{
-						ID:       slotID,
-						RackID:   rc.id,
-						Row:      row,
-						Col:      col,
-						Level:    level,
-						X:        rc.x - 1.2 + float64(col)*1.2,
-						Y:        0.5 + float64(level)*1.3,
-						Z:        rc.z - 0.3 + float64(row)*0.6,
-						Status:   status,
-						ItemID:   "",
-						ItemName: "",
+						ID:         slotID,
+						RackID:     rc.id,
+						Row:        row,
+						Col:        col,
+						Level:      level,
+						X:          rc.x - 1.2 + float64(col)*1.2,
+						Y:          0.5 + float64(level)*1.3,
+						Z:          rc.z - 0.3 + float64(row)*0.6,
+						Status:     status,
+						ItemID:     "",
+						ItemName:   "",
+						VisitCount: rand.Intn(50),
 					}
 					if status == SlotOccupied {
 						slot.ItemID = "item-" + slotID
@@ -259,6 +261,19 @@ func (w *Warehouse) findValidTarget(agv *AGV) (float64, float64) {
 	return agv.X, agv.Z
 }
 
+func (w *Warehouse) findNearestSlots(x, z float64, maxDist float64) []*Slot {
+	var result []*Slot
+	for _, slot := range w.slots {
+		dx := slot.X - x
+		dz := slot.Z - z
+		dist := math.Sqrt(dx*dx + dz*dz)
+		if dist < maxDist {
+			result = append(result, slot)
+		}
+	}
+	return result
+}
+
 func (w *Warehouse) updateAGV(agv *AGV) {
 	agv.Battery = math.Max(10, agv.Battery-0.005)
 
@@ -318,6 +333,10 @@ func (w *Warehouse) updateAGV(agv *AGV) {
 	} else {
 		if agv.Status == AGVMoving {
 			agv.Status = AGVIdle
+			nearbySlots := w.findNearestSlots(agv.X, agv.Z, 2.0)
+			for _, slot := range nearbySlots {
+				slot.VisitCount++
+			}
 		}
 		if rand.Float64() < 0.01 && agv.Status == AGVIdle {
 			newTargetX, newTargetZ := w.findValidTarget(agv)

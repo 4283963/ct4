@@ -3,9 +3,12 @@ import { useWebSocket } from './hooks/useWebSocket'
 import { WarehouseScene } from './components/WarehouseScene'
 import { AGVPanel } from './components/AGVPanel'
 import { StatsPanel } from './components/StatsPanel'
+import { useWarehouseStore } from './store/useWarehouseStore'
 
 function App() {
   useWebSocket()
+  const showHeatmap = useWarehouseStore((s) => s.showHeatmap)
+  const toggleHeatmap = useWarehouseStore((s) => s.toggleHeatmap)
 
   return (
     <div className="w-screen h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
@@ -36,6 +39,20 @@ function App() {
               空闲
             </span>
           </div>
+          <button
+            onClick={toggleHeatmap}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              showHeatmap
+                ? 'bg-gradient-to-r from-blue-600 to-red-600 text-white border-transparent shadow-lg shadow-red-500/20'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+            </svg>
+            热力图
+            <span className={`w-8 h-4 rounded ${showHeatmap ? 'bg-gradient-to-r from-blue-500 via-yellow-400 to-red-500' : 'bg-slate-600'}`} />
+          </button>
         </div>
       </header>
 
@@ -47,6 +64,16 @@ function App() {
 
         <section className="flex-1 relative">
           <WarehouseScene />
+          {showHeatmap && (
+            <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur-sm rounded-lg px-4 py-3 border border-slate-700/50">
+              <p className="text-xs text-slate-300 font-medium mb-2">访问频次热力图</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">低</span>
+                <div className="w-32 h-3 rounded bg-gradient-to-r from-blue-500 via-green-400 via-yellow-400 to-red-500" />
+                <span className="text-xs text-slate-400">高</span>
+              </div>
+            </div>
+          )}
           <div className="absolute bottom-4 left-4 bg-slate-900/70 backdrop-blur-sm rounded-lg px-3 py-2 border border-slate-700/50">
             <p className="text-xs text-slate-400">
               <span className="text-white font-medium">操作提示：</span>

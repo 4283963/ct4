@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import * as THREE from 'three'
+import { useWarehouseStore } from '../store/useWarehouseStore'
 
 const SLOT_COLORS = {
   empty: '#1e293b',
@@ -7,9 +8,22 @@ const SLOT_COLORS = {
   reserved: '#f59e0b',
 }
 
+function getHeatmapColor(value) {
+  const t = Math.max(0, Math.min(1, value))
+  const r = Math.round(t * 255)
+  const g = Math.round((1 - Math.abs(t - 0.5) * 2) * 180)
+  const b = Math.round((1 - t) * 255)
+  return `rgb(${r}, ${g}, ${b})`
+}
+
 export function Slot({ slot }) {
-  const color = SLOT_COLORS[slot.status] || SLOT_COLORS.empty
+  const showHeatmap = useWarehouseStore((s) => s.showHeatmap)
+  const maxVisitCount = useWarehouseStore((s) => s.maxVisitCount)
+
+  const baseColor = SLOT_COLORS[slot.status] || SLOT_COLORS.empty
   const isOccupied = slot.status === 'occupied'
+  const visitRatio = (slot.visitCount || 0) / maxVisitCount
+  const heatColor = getHeatmapColor(visitRatio)
 
   const edgesGeometry = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1.0, 0.9, 0.5)), [])
 
@@ -18,14 +32,16 @@ export function Slot({ slot }) {
       <mesh position={[0, 0, 0]}>
         <boxGeometry args={[1.0, 0.9, 0.5]} />
         <meshStandardMaterial
-          color={color}
+          color={showHeatmap ? heatColor : baseColor}
           transparent
-          opacity={isOccupied ? 0.9 : 0.4}
+          opacity={showHeatmap ? 0.7 : (isOccupied ? 0.9 : 0.4)}
+          emissive={showHeatmap ? heatColor : '#000000'}
+          emissiveIntensity={showHeatmap ? 0.3 : 0}
           metalness={0.3}
           roughness={0.7}
         />
       </mesh>
-      {isOccupied && (
+      {isOccupied && !showHeatmap && (
         <mesh position={[0, 0.02, 0]}>
           <boxGeometry args={[0.8, 0.6, 0.4]} />
           <meshStandardMaterial
